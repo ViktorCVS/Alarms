@@ -1,5 +1,5 @@
 # Alarms
-A alarm system that adds how many alarms do you want with a name.
+A alarm system that adds how many alarms do you want with a name and notify you with a beep and voice.
 
 Modules that I use:
 
