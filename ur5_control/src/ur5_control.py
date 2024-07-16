@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 
-import rospy
+import rospy                                                                 # rospy para utilizar funções do ROS.
 
-from gazebo_msgs.msg import LinkStates
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from gazebo_msgs.msg import LinkStates                                       # LinkStates para ler o Ground Truth do Gazebo para cada junta, incluindo o executor.
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint        # JointTrajectory para enviar o comando de trajetória e JointTrajectoryPoint para gerar o ponto da trajetória.
 
-import random
-import numpy as np
-from math import sin,cos,pi
-from tf.transformations import euler_from_quaternion
+import random                                                                # random para escolher aleatoriamente um ângulo para cada junta.
+import numpy as np                                                           # numpy para trabalho matricial.
+from math import sin,cos,pi, ceil                                            # math para uso das funções seno, cosseno e teto, além do valor de pi.
+from tf.transformations import euler_from_quaternion                         # euler_from_quaternion para converter a orientação de quaternion para euler.
 
 class CompareTrajectory():
     def __init__(self):
 
-        rospy.init_node('ur5_compare_trajectory')
+        # Nomeando o nó.
+        rospy.init_node('ur5_compare_trajectory') 
 
         # Criar um publisher para o tópico de comando de trajetória.
         self.pub = rospy.Publisher('/eff_joint_traj_controller/command', JointTrajectory, queue_size=10)
@@ -21,24 +22,40 @@ class CompareTrajectory():
         # Criar um subscriber para o tópico de posição das juntas.
         rospy.Subscriber('/gazebo/link_states', LinkStates, self.get_link_callback)
 
-        self.control = True
-
-        # Esperar pelo publisher e subscriber se conectar
+        # Esperar pelo publisher e subscriber se conectarem.
         rospy.sleep(1)
 
-        self.inital_pose = [0.815829623,0.191638381,0.087551819]
+        # Intervalo de tempo para enviar a referência de trajetória.
+        tempo_referencia = 5
 
-        rospy.Timer(rospy.Duration(5), self.timer_callback)  
+        # Tempo para que a trajetória seja concluída quando a referência for enviada.
+        self.tempo_trajetoria = 2.5
+
+        # Vetor que acumulará a posição prevista para a junta, posição passada e atual.
+        self.poses = [[0,0,0],0]
+
+        # Contador de iteração.
+        self.contador = 0
+
+        # Timer para enviar a referência de posição periodicamente.
+        rospy.Timer(rospy.Duration(tempo_referencia), self.timer_callback)  
 
 
     def timer_callback(self,event): 
 
+        # Função que calcula a trajetória futura, envia a referência para o controlador de posição e compara a previsão com o ground truth. #
+
+        # Iniciando a mensagem de trajetória.
         traj = JointTrajectory()
 
+        # Incluindo o nome das juntas.
         traj.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 
                             'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint']
 
+        # Iniciando a mensagem de ponto de referência.
         point = JointTrajectoryPoint()
+
+        # ----- Escolhendo aleatóriamente ângulo para as juntas, respeitando as limitações físicas para que não haja colisão/autocolisão. -----
 
         j1 = random.uniform(-pi,pi)
         j2 = random.uniform(0,-pi)
@@ -54,128 +71,117 @@ class CompareTrajectory():
 
         j6 = random.uniform(-pi,pi)
 
+        # -------------------------------------------------------------------------------------------------------------------------------------
+
+        # Montando a mensagem do ponto de referência com base no valor das juntas.
         point.positions = [j1, j2, j3, j4, j5, j6]
-        point.positions = [0, 0, 0, 0, 0, 0]
 
-        point.time_from_start = rospy.Duration(2.5)
+        # Definindo o tempo para que a trajetória seja realizada
+        point.time_from_start = rospy.Duration(self.tempo_trajetoria)
 
+        # Adicionando a mensagem de ponto para a mensagem da trajetória.
         traj.points.append(point)
 
-        ##
+
+        # ----- Definindo as medidas estruturais do robô UR5, considerando ajustes de simulação e o sistema de coordenadas. -----
 
         d1 = 0.08915895487108214+0.1000000368892521
+
         a2  = 0.424994
-        dz2 = -0.002161932
+        d2 = -0.002161932
+
         a3 = 0.392236
         d3 = 0.109051
-        dz = -0.004635843 
-        dx = -0.001118244
-        d4 = -0.09464348
-        d5 = 0.0823  
 
-        j1,j2,j3,j4,j5,j6 = pi/2,0,0,0,0,0
+        de = 0.004635303
 
+        d4 = 0.09464348
 
-        T1 = np.matrix([[cos(j1),-sin(j1),0       ,0         ],
-                        [sin(j1),cos(j1) ,0       ,0         ],
-                        [0      ,0       ,1       ,d1        ],
-                        [0      ,0       ,0       ,1         ]])
+        dx = 0.001118318
+
+        d5 = 0.0823 
+
+        # ----------------------------------------------------------------------------------------------------------------------- 
 
 
-        T2 = np.matrix([[cos(j2),0       ,sin(j2) ,0         ],
-                        [sin(j2),0       ,-cos(j2),0         ],
-                        [0      ,1       ,0       ,0         ],
-                        [0      ,0       ,0       ,1         ]])
+        # Montando as medidas estruturais como lista para automação.
+        d =    [d1,0   ,d2  ,d3    ,d4+de    ,d5   ]
+        a =    [0 ,0   ,-a2  ,-a3   ,dx      ,0    ]
+        alfa = [0 ,pi/2,0    ,0     ,pi/2    ,-pi/2]
+        j =    [j1,j2  ,j3   ,j4    ,j5      ,j6   ]
 
 
-        T3 = np.matrix([[cos(j3),-sin(j3),0       ,a2*cos(j3)],
-                        [sin(j3),cos(j3) ,0       ,a2*sin(j3)],
-                        [0      ,0       ,1       ,0         ],
-                        [0      ,0       ,0       ,1         ]])
+        # Laço de repetição para multiplicar cada T_i e encontrar a transformação final T com os valores das medidas estruturais e ângulos de cada junta
+        i=0
+        T=1
+        while(i<len(d)):
+            T *= self.T_link(j[i],alfa[i],a[i],d[i])
+            i+=1
+    
+        # Encontrando a nova posição pela quarta coluna e três primeiras linhas da matrix T.
+        new_position = [-T[0,3],-T[1,3],T[2,3]]
 
-        T4 = np.matrix([[cos(j4),-sin(j4),0       ,a3*cos(j4)],
-                        [sin(j4),cos(j4) ,0       ,a3*sin(j4)],
-                        [0      ,0       ,1       ,d3        ],
-                        [0      ,0       ,0       ,1         ]])
+        # Nova pose para previsão atual.
+        self.poses[1] = new_position
 
-        T5 = np.matrix([[cos(j5),0       ,sin(j5) ,0         ],
-                        [sin(j5),0       ,-cos(j5),0         ],
-                        [0      ,1       ,0       ,d4        ],
-                        [0      ,0       ,0       ,1         ]])
+        # Calculando o erro entre o ground truth e o cálculo matricial.
+        Erro = [100*abs(self.position[0]-self.poses[0][0]),100*abs(self.position[1]-self.poses[0][1]),100*abs(self.position[2]-self.poses[0][2])]
 
-        T6 = np.matrix([[cos(j6),0       ,-sin(j6),0         ],
-                        [sin(j6),0       ,cos(j6) ,0        ],
-                        [0      ,-1      ,0       ,d5         ],
-                        [0      ,0       ,0       ,1         ]])
+        # Formatação das mensagens no terminal, indicando o número da iteração, posição pelo grounth truth e pelo cálculo matricial, além do erro
+        # e o valor máximo que esse erro chegou em % discreta de 0.5 em 0.5%.
+        if self.contador != 0 :
+            
+            print("-------------------------------------------------------------------------")
+            print(f"Iteração número: {self.contador}\n")
+            print(f"Posição [DH]:\nx: {self.poses[0][0]}\ny: {self.poses[0][1]}\nz: {self.poses[0][2]}\n")       #print("pos[k+1]: ",new_position)
+            print(f"Posição [GT]:\nx: {self.position[0]}\ny: {self.position[1]}\nz: {self.position[2]}\n")
+            print(f"Erro:\nx: {Erro[0]}\ny: {Erro[1]}\nz: {Erro[2]}\n")
 
+            limite = ceil(max(Erro))
 
+            if(limite - max(Erro) > 0.5):
+                limite -= 0.5
 
-        T = T1@T2@T3@T4@T5@T6
+            if Erro[0]<limite and Erro[1]<limite and Erro[2]<limite:
+                print(f"Todos os erros absolutos inferiores a {limite}%.")
+            print()
 
-        print(T_end)
-        print(T)
-
-        ##
-
-        new_position = T * self.position.T
-        new_position = T * np.matrix([0,0,0,1]).T
-        print(new_position)
-        new_position = [new_position[0]/new_position[3],new_position[1]/new_position[3],new_position[1]/new_position[3]]
-        #print("pos[k+1]: ",new_position)
-        print("pos[k]: ",self.position)
-        print()
-
+        # Enviando a trajetória efetivamente.
         self.pub.publish(traj)
+
+        # A nova posição se torna antiga.
+        self.poses[0] = self.poses[1]
+
+        # Incrementando o contador.
+        self.contador +=1
 
 
     def get_link_callback(self,msg):
 
+        # Callback destinado a recuperar a posição do executor pelo ground truth. #
+
         position = msg.pose[-1].position
-        self.position = np.matrix([position.x,position.y,position.z,1])
+        self.position = [position.x,position.y,position.z]
         
         orientation = msg.pose[-1].orientation
         orientation = [orientation.x,orientation.y,orientation.z,orientation.w]
         self.orientation = list(euler_from_quaternion(orientation))
 
-    def Tx(self,dx):
-        return np.matrix([[1,0,0,dx],
-                          [0,1,0,0],
-                          [0,0,1,0],
-                          [0,0,0,1]])
+    def T_link(self,theta,alfa,a,d):
+
+        # Função que monta a matrix da transformação homogênea entre as juntas. #
+
+        return np.matrix([[cos(theta)          ,-sin(theta)         ,0         ,a           ],
+                          [sin(theta)*cos(alfa),cos(theta)*cos(alfa),-sin(alfa),-sin(alfa)*d],
+                          [sin(theta)*sin(alfa),cos(theta)*sin(alfa),cos(alfa) ,cos(alfa)*d ],
+                          [0                   ,0                   ,0         ,1           ]])
     
-    def Ty(self,dy):
-        return np.matrix([[1,0,0,0],
-                          [0,1,0,dy],
-                          [0,0,1,0],
-                          [0,0,0,1]])
-    
-    def Tz(self,dz):
-        return np.matrix([[1,0,0,0],
-                          [0,1,0,0],
-                          [0,0,1,dz],
-                          [0,0,0,1]])
-    
-    def Rx(self,theta):
-        return np.matrix([[1,0,0,0],
-                          [0,cos(theta),-sin(theta),0],
-                          [0,sin(theta),cos(theta),0],
-                          [0,0,0,1]])
-    
-    def Ry(self,theta):
-        return np.matrix([[cos(theta),0,sin(theta),0],
-                          [0,1,0,0],
-                          [-sin(theta),0,cos(theta),0],
-                          [0,0,0,1]])
-    
-    def Rz(self,theta):
-        return np.matrix([[cos(theta),-sin(theta),0,0],
-                          [sin(theta),cos(theta),0,0],
-                          [0,0,1,0],
-                          [0,0,0,1]])
+
  
 
 if __name__ == '__main__':
     try:
+        # Criando o objeto e iniciando o nó
         init_compare = CompareTrajectory()
         rospy.spin()
     except rospy.ROSInterruptException:
