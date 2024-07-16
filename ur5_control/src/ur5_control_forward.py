@@ -7,7 +7,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint        # J
 
 import random                                                                # random para escolher aleatoriamente um ângulo para cada junta.
 import numpy as np                                                           # numpy para trabalho matricial.
-from math import sin,cos,pi, ceil                                            # math para uso das funções seno, cosseno e teto, além do valor de pi.
+from math import sin,cos,pi, ceil, inf                                       # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
 from tf.transformations import euler_from_quaternion                         # euler_from_quaternion para converter a orientação de quaternion para euler.
 
 class CompareTrajectory():
@@ -33,6 +33,11 @@ class CompareTrajectory():
 
         # Vetor que acumulará a posição prevista para a junta, posição passada e atual.
         self.poses = [[0,0,0],0]
+
+        # Variáveis auxiliares para caracterização do erro.
+        self.erro_max = -inf
+        self.erro_min = inf
+        self.erro_medio = 0
 
         # Contador de iteração.
         self.contador = 0
@@ -105,10 +110,10 @@ class CompareTrajectory():
 
 
         # Montando as medidas estruturais como lista para automação.
-        d =    [d1,0   ,d2  ,d3    ,d4+de    ,d5   ]
-        a =    [0 ,0   ,-a2  ,-a3   ,dx      ,0    ]
-        alfa = [0 ,pi/2,0    ,0     ,pi/2    ,-pi/2]
-        j =    [j1,j2  ,j3   ,j4    ,j5      ,j6   ]
+        d =    [d1 ,0    ,d2  ,d3   ,d4+de ,d5   ]
+        a =    [0  ,0    ,-a2 ,-a3  ,dx    ,0    ]
+        alfa = [0  ,pi/2 ,0   ,0    ,pi/2  ,-pi/2]
+        j =    [j1 ,j2   ,j3  ,j4   ,j5    ,j6   ]
 
 
         # Laço de repetição para multiplicar cada T_i e encontrar a transformação final T com os valores das medidas estruturais e ângulos de cada junta
@@ -143,7 +148,17 @@ class CompareTrajectory():
                 limite -= 0.5
 
             if Erro[0]<limite and Erro[1]<limite and Erro[2]<limite:
-                print(f"Todos os erros absolutos inferiores a {limite}%.")
+                print(f"Todos os erros absolutos inferiores a {limite}%")
+            if max(Erro)>self.erro_max:
+                self.erro_max = max(Erro)
+            if min(Erro)<self.erro_min:
+                self.erro_min = min(Erro)
+            self.erro_medio += (Erro[0]+Erro[1]+Erro[2])/3
+
+            print(f"Erro máximo: {self.erro_max}%")
+            print(f"Erro mínimo: {self.erro_min}%")
+            print(f"Erro médio: {self.erro_medio/self.contador}%")
+            
             print()
 
         # Enviando a trajetória efetivamente.
