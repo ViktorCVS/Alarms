@@ -7,8 +7,10 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint        # J
 
 import random                                                                # random para escolher aleatoriamente um ângulo para cada junta.
 import numpy as np                                                           # numpy para trabalho matricial.
-from math import sin,cos,pi, ceil, inf                                       # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
+from math import sin,cos,pi, ceil, inf, acos, asin, atan2                                      # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
 from tf.transformations import euler_from_quaternion                         # euler_from_quaternion para converter a orientação de quaternion para euler.
+from scipy.spatial.transform import Rotation as R
+
 
 class CompareTrajectory():
     def __init__(self):
@@ -34,10 +36,16 @@ class CompareTrajectory():
         # Vetor que acumulará a posição prevista para a junta, posição passada e atual.
         self.poses = [[0,0,0],0]
 
+        self.orien = [[0,0,0],0]
+
         # Variáveis auxiliares para caracterização do erro.
         self.erro_max = -inf
         self.erro_min = inf
         self.erro_medio = 0
+
+        self.erro_max_orien = -inf
+        self.erro_min_orien = inf
+        self.erro_medio_orien = 0
 
         # Contador de iteração.
         self.contador = 0
@@ -92,8 +100,8 @@ class CompareTrajectory():
 
         d1 = 0.08915895487108214+0.1000000368892521
 
-        a2  = 0.424994
-        d2 = -0.002161932
+        a2 = 0.424994
+        d2 = 0.002161932
 
         a3 = 0.392236
         d3 = 0.109051
@@ -102,7 +110,7 @@ class CompareTrajectory():
 
         d4 = 0.09464348
 
-        dx = 0.001118318
+        ax = 0.001354042
 
         d5 = 0.0823 
 
@@ -110,10 +118,10 @@ class CompareTrajectory():
 
 
         # Montando as medidas estruturais como lista para automação.
-        d =    [d1 ,0    ,d2  ,d3   ,d4+de ,d5   ]
-        a =    [0  ,0    ,-a2 ,-a3  ,dx    ,0    ]
-        alfa = [0  ,pi/2 ,0   ,0    ,pi/2  ,-pi/2]
-        j =    [j1 ,j2   ,j3  ,j4   ,j5    ,j6   ]
+        d =    [d1 ,0    ,-d2 ,d3    ,d4+de ,d5   ]
+        a =    [0  ,0    ,-a2 ,-a3+ax,0     ,0    ]
+        alfa = [0  ,pi/2 ,0   ,0     ,pi/2  ,-pi/2]
+        j =    [j1 ,j2   ,j3  ,j4    ,j5    ,j6   ]
 
 
         # Laço de repetição para multiplicar cada T_i e encontrar a transformação final T com os valores das medidas estruturais e ângulos de cada junta
@@ -125,12 +133,25 @@ class CompareTrajectory():
     
         # Encontrando a nova posição pela quarta coluna e três primeiras linhas da matrix T.
         new_position = [-T[0,3],-T[1,3],T[2,3]]
+        
+        gamma = atan2(T[2,1],T[2,2])
+        alfa = atan2(T[1,0],T[0,0])
+        sB = -T[2,0]
+        cB = T[0,0]/cos(alfa)
+        beta = atan2(sB,cB)
+
+        if alfa > 0: alfa -= pi
+        elif alfa <= 0: alfa += pi
+        
+        new_orientation = [gamma,beta,alfa]
 
         # Nova pose para previsão atual.
         self.poses[1] = new_position
+        self.orien[1] = new_orientation
 
         # Calculando o erro entre o ground truth e o cálculo matricial.
         Erro = [100*abs(self.position[0]-self.poses[0][0]),100*abs(self.position[1]-self.poses[0][1]),100*abs(self.position[2]-self.poses[0][2])]
+        Erro_orien = [100*abs(self.orientation[0]-self.orien[0][0]),100*abs(self.orientation[1]-self.orien[0][1]),100*abs(self.orientation[2]-self.orien[0][2])]
 
         # Formatação das mensagens no terminal, indicando o número da iteração, posição pelo grounth truth e pelo cálculo matricial, além do erro
         # e o valor máximo que esse erro chegou em % discreta de 0.5 em 0.5%.
@@ -138,9 +159,12 @@ class CompareTrajectory():
             
             print("-------------------------------------------------------------------------")
             print(f"Iteração número: {self.contador}\n")
-            print(f"Posição [DH]:\nx: {self.poses[0][0]}\ny: {self.poses[0][1]}\nz: {self.poses[0][2]}\n")       #print("pos[k+1]: ",new_position)
+            print(f"Posição [DH]:\nx: {self.poses[0][0]}\ny: {self.poses[0][1]}\nz: {self.poses[0][2]}\n")
+            print(f"Orientação [DH]:\nx: {self.orien[0][0]}\ny: {self.orien[0][1]}\nz: {self.orien[0][2]}\n")
             print(f"Posição [GT]:\nx: {self.position[0]}\ny: {self.position[1]}\nz: {self.position[2]}\n")
-            print(f"Erro:\nx: {Erro[0]}\ny: {Erro[1]}\nz: {Erro[2]}\n")
+            print(f"Orientação [GT]:\nx: {self.orientation[0]}\ny: {self.orientation[1]}\nz: {self.orientation[2]}\n")
+            print(f"Erro de posição:\nx: {Erro[0]}%\ny: {Erro[1]}%\nz: {Erro[2]}%\n")
+            print(f"Erro de orientação:\nx: {Erro_orien[0]}%\ny: {Erro_orien[1]}%\nz: {Erro_orien[2]}%\n")
 
             limite = ceil(max(Erro))
 
@@ -148,17 +172,36 @@ class CompareTrajectory():
                 limite -= 0.5
 
             if Erro[0]<limite and Erro[1]<limite and Erro[2]<limite:
-                print(f"Todos os erros absolutos inferiores a {limite}%")
+                print(f"Todos os erros absolutos de posição inferiores a {limite}%")
             if max(Erro)>self.erro_max:
                 self.erro_max = max(Erro)
             if min(Erro)<self.erro_min:
                 self.erro_min = min(Erro)
             self.erro_medio += (Erro[0]+Erro[1]+Erro[2])/3
 
-            print(f"Erro máximo: {self.erro_max}%")
-            print(f"Erro mínimo: {self.erro_min}%")
-            print(f"Erro médio: {self.erro_medio/self.contador}%")
-            
+            print(f"Erro máximo de posição: {self.erro_max}%")
+            print(f"Erro mínimo de posição: {self.erro_min}%")
+            print(f"Erro médio de posição: {self.erro_medio/self.contador}%")
+
+            print()
+
+            limite_orien = ceil(max(Erro_orien))
+
+            if(limite_orien - max(Erro_orien) > 0.5):
+                limite_orien -= 0.5
+
+            if Erro_orien[0]<limite_orien and Erro_orien[1]<limite_orien and Erro_orien[2]<limite_orien:
+                print(f"Todos os erros absolutos de orientação inferiores a {limite_orien}%")
+            if max(Erro_orien)>self.erro_max_orien:
+                self.erro_max_orien = max(Erro_orien)
+            if min(Erro_orien)<self.erro_min_orien:
+                self.erro_min_orien = min(Erro_orien)
+            self.erro_medio_orien += (Erro_orien[0]+Erro_orien[1]+Erro_orien[2])/3
+
+            print(f"Erro máximo de orientação: {self.erro_max_orien}%")
+            print(f"Erro mínimo de orientação: {self.erro_min_orien}%")
+            print(f"Erro médio de orientação: {self.erro_medio_orien/self.contador}%")
+
             print()
 
         # Enviando a trajetória efetivamente.
@@ -166,6 +209,7 @@ class CompareTrajectory():
 
         # A nova posição se torna antiga.
         self.poses[0] = self.poses[1]
+        self.orien[0] = self.orien[1]
 
         # Incrementando o contador.
         self.contador +=1
