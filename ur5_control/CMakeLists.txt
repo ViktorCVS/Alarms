@@ -14,7 +14,8 @@ include_directories(
 )
 
 catkin_install_python(PROGRAMS
-  src/ur5_control.py
+  src/ur5_control_forward.py
+  src/ur5_control_inverse.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
