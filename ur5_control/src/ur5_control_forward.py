@@ -159,12 +159,19 @@ class CompareTrajectory():
             
             print("-------------------------------------------------------------------------")
             print(f"Iteração número: {self.contador}\n")
-            print(f"Posição [DH]:\nx: {self.poses[0][0]}\ny: {self.poses[0][1]}\nz: {self.poses[0][2]}\n")
-            print(f"Orientação [DH]:\nx: {self.orien[0][0]}\ny: {self.orien[0][1]}\nz: {self.orien[0][2]}\n")
-            print(f"Posição [GT]:\nx: {self.position[0]}\ny: {self.position[1]}\nz: {self.position[2]}\n")
-            print(f"Orientação [GT]:\nx: {self.orientation[0]}\ny: {self.orientation[1]}\nz: {self.orientation[2]}\n")
-            print(f"Erro de posição:\nx: {Erro[0]}%\ny: {Erro[1]}%\nz: {Erro[2]}%\n")
-            print(f"Erro de orientação:\nx: {Erro_orien[0]}%\ny: {Erro_orien[1]}%\nz: {Erro_orien[2]}%\n")
+            print(f"Posição indicada pelo ground truth:\tPosição indicada pela cinemática direta:")
+            print(f"x [GT]: {round(self.position[0],4):.4f}\t\t\t\tx [DH]: {round(self.poses[0][0],4):.4f}")
+            print(f"y [GT]: {round(self.position[1],4):.4f}\t\t\t\ty [DH]: {round(self.poses[0][1],4):.4f}")
+            print(f"z [GT]: {round(self.position[2],4):.4f}\t\t\t\tz [DH]: {round(self.poses[0][2],4):.4f}\n")
+            print(f"Orientação indicada pelo ground truth:\tOrientação indicada pela cinemática direta:")
+            print(f"x [GT]: {round(self.orientation[0],4):.4f}\t\t\t\tx [DH]: {round(self.orien[0][0],4):.4f}")
+            print(f"y [GT]: {round(self.orientation[1],4):.4f}\t\t\t\ty [DH]: {round(self.orien[0][1],4):.4f}")
+            print(f"z [GT]: {round(self.orientation[2],4):.4f}\t\t\t\tz [DH]: {round(self.orien[0][2],4):.4f}\n")
+            print(f"Erro de posição:\t\t\tErro de orientação:")
+            print(f"x: {round(Erro[0],4):.4f}%\t\t\t\tx: {round(Erro_orien[0],4):.4f}%")
+            print(f"y: {round(Erro[1],4):.4f}%\t\t\t\ty: {round(Erro_orien[1],4):.4f}%")
+            print(f"z: {round(Erro[2],4):.4f}%\t\t\t\tz: {round(Erro_orien[2],4):.4f}%")
+            print()
 
             limite = ceil(max(Erro))
 
@@ -179,11 +186,6 @@ class CompareTrajectory():
                 self.erro_min = min(Erro)
             self.erro_medio += (Erro[0]+Erro[1]+Erro[2])/3
 
-            print(f"Erro máximo de posição: {self.erro_max}%")
-            print(f"Erro mínimo de posição: {self.erro_min}%")
-            print(f"Erro médio de posição: {self.erro_medio/self.contador}%")
-
-            print()
 
             limite_orien = ceil(max(Erro_orien))
 
@@ -198,9 +200,11 @@ class CompareTrajectory():
                 self.erro_min_orien = min(Erro_orien)
             self.erro_medio_orien += (Erro_orien[0]+Erro_orien[1]+Erro_orien[2])/3
 
-            print(f"Erro máximo de orientação: {self.erro_max_orien}%")
-            print(f"Erro mínimo de orientação: {self.erro_min_orien}%")
-            print(f"Erro médio de orientação: {self.erro_medio_orien/self.contador}%")
+            print()
+
+            print(f"Erro máximo de posição: {round(self.erro_max,4):.4f}%\t\tErro máximo de orientação: {round(self.erro_max_orien,4):.4f}%")
+            print(f"Erro mínimo de posição: {round(self.erro_min,4):.4f}%\t\tErro mínimo de orientação: {round(self.erro_min_orien,4):.4f}%")
+            print(f"Erro médio de posição: {round(self.erro_medio/self.contador,4):.4f}%\t\tErro médio de orientação: {round(self.erro_medio_orien/self.contador,4):.4f}%")
 
             print()
 
