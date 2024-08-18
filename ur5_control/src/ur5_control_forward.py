@@ -7,9 +7,9 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint        # J
 
 import random                                                                # random para escolher aleatoriamente um ângulo para cada junta.
 import numpy as np                                                           # numpy para trabalho matricial.
-from math import sin,cos,pi, ceil, inf, acos, asin, atan2                                      # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
+from math import sin,cos,pi, ceil, inf, acos, asin, atan2                    # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
 from tf.transformations import euler_from_quaternion                         # euler_from_quaternion para converter a orientação de quaternion para euler.
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation as R                            # R para trabalhar com rotações.
 
 
 class CompareTrajectory():
