@@ -7,9 +7,9 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint        # J
 
 import random                                                                # random para escolher aleatoriamente um ângulo para cada junta.
 import numpy as np                                                           # numpy para trabalho matricial.
-from math import sin,cos,pi, ceil, inf, acos, asin, atan2, sqrt                                     # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
+from math import sin,cos,pi, ceil, inf, acos, asin, atan2, sqrt              # math para uso das funções seno, cosseno e teto, além do valor de pi e infinito.
 from tf.transformations import euler_from_quaternion                         # euler_from_quaternion para converter a orientação de quaternion para euler.
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation as R                            # R para trabalhar com rotações.
 
 
 class CompareTrajectory():
@@ -56,6 +56,7 @@ class CompareTrajectory():
         self.contador = 0
         self.inner_contador = 0
 
+        # declaração das variáveis das juntas
         self.j1 = 0
         self.j2 = 0
         self.j3 = 0
@@ -63,8 +64,10 @@ class CompareTrajectory():
         self.j5 = 0
         self.j6 = 0
 
+        # Vetor para armazenar a posição das juntas para comparação.
         self.J = np.zeros((6,2))
 
+        # Vetor para armazenar a posição para comparação.
         self.position_anterior = [0,0,0]
         self.orientation_anterior = [0,0,0]
 
@@ -134,15 +137,12 @@ class CompareTrajectory():
 
         # ----------------------------------------------------------------------------------------------------------------------- 
 
-
-        # Montando as medidas estruturais como lista para automação.
-        d =    [d1 ,0    ,-d2 ,d3    ,d4+de ,d5   ]
-        a =    [0  ,0    ,-a2 ,-a3+ax,0     ,0    ]
-        alfa = [0  ,pi/2 ,0   ,0     ,pi/2  ,-pi/2]
-        j =    [self.j1 ,self.j2   ,self.j3  ,self.j4    ,self.j5    ,self.j6   ]
-
-
         if self.contador%3 == 1:
+
+            # ----- Cálculo da cinemática inversa para o robô UR5. -----
+
+
+            # ------------------------- tetha 1 -------------------------
 
             T = np.matrix([[cos(self.orientation[2])*cos(self.orientation[1]), cos(self.orientation[2])*sin(self.orientation[1])*sin(self.orientation[0])-sin(self.orientation[2])*cos(self.orientation[0]), cos(self.orientation[2])*sin(self.orientation[1])*cos(self.orientation[0])+sin(self.orientation[2])*sin(self.orientation[0]), self.position[0]],
                         [sin(self.orientation[2])*cos(self.orientation[1]), sin(self.orientation[2])*sin(self.orientation[1])*sin(self.orientation[0])+cos(self.orientation[2])*cos(self.orientation[0]), sin(self.orientation[2])*sin(self.orientation[1])*cos(self.orientation[0])-cos(self.orientation[2])*sin(self.orientation[0]), self.position[1]],
@@ -169,13 +169,21 @@ class CompareTrajectory():
             if abs(self.J[0,0]-self.tetha_1)>=abs(self.J[0,0]-tetha_1x):
                 self.tetha_1 = tetha_1x
 
+            if abs(self.J[0,0]-self.tetha_1)>=abs(self.J[0,0]+self.tetha_1):
+                self.tetha_1 *= -1
+
+            # ------------------------- tetha 5 -------------------------
+
             rex = (-self.position[0]*sin(self.tetha_1)+self.position[1]*cos(self.tetha_1)-d3)/d5
             self.tetha_5 = acos(rex)
 
             if abs(self.tetha_5 - self.J[4,0]) >= abs(-self.tetha_5+2*pi -self.J[4,0]):
                 self.tetha_5 = -self.tetha_5+2*pi
 
+            if abs(self.J[4,0]-self.tetha_5)>=abs(self.J[4,0]+self.tetha_5):
+                self.tetha_5 *= -1
 
+            # ------------------------- tetha 6 -------------------------
 
             if self.orientation[2] >= 0: alfa = self.orientation[2]-pi
             elif self.orientation[2] < 0: alfa = self.orientation[2]+pi
@@ -188,6 +196,10 @@ class CompareTrajectory():
 
             self.tetha_6 = atan2((-T_i[1,0]*sin(self.tetha_1)+T_i[1,1]*cos(self.tetha_1))/sin(self.tetha_5),(T_i[0,0]*sin(self.tetha_1)-T_i[0,1]*cos(self.tetha_1))/sin(self.tetha_5))
 
+            if abs(self.J[5,0]-self.tetha_6)>=abs(self.J[5,0]+self.tetha_6):
+                self.tetha_6 *= -1
+
+            # ------------------------- tetha 3 -------------------------
 
             T56 = np.matrix([[cos(self.tetha_6),-sin(self.tetha_6),0,0],
                             [0,0,1,d5],
@@ -228,9 +240,17 @@ class CompareTrajectory():
             if abs(self.J[2,0]-self.tetha_3)>=abs(self.J[2,0]-tetha_3x):
                 self.tetha_3 = tetha_3x
 
+            if abs(self.J[2,0]-self.tetha_3)>=abs(self.J[2,0]+self.tetha_3):
+                self.tetha_3 *= -1
+
+            # ------------------------- tetha 2 -------------------------
 
             self.tetha_2 = atan2(-T14[2,3],-T14[0,3])-asin((a3-ax)*sin(self.tetha_3)/sqrt(T14[0,3]**2+T14[2,3]**2))
 
+            if abs(self.J[1,0]-self.tetha_2)>=abs(self.J[1,0]+self.tetha_2):
+                self.tetha_2 *= -1
+
+            # ------------------------- tetha 4 -------------------------
 
             T12 = np.matrix([[cos(self.tetha_2),-sin(self.tetha_2),0,0],
                             [0,0,-1,0],
@@ -248,6 +268,9 @@ class CompareTrajectory():
 
             if abs(self.J[3,0]-self.tetha_4)>=abs(self.J[3,0]+self.tetha_4):
                 self.tetha_4 *= -1
+
+            
+            # Atualizando posições e orientações anteriores para o cálculo do erro.
 
             self.position_anterior[0] = self.position[0]
             self.position_anterior[1] = self.position[1]
@@ -340,7 +363,6 @@ class CompareTrajectory():
             print(f"Erro médio de posição : {round(self.erro_medio/self.contador,4):.4f}%\t\t\tErro médio de orientação : {round(self.erro_medio_orien/self.contador,4):.4f}%")
             print()
 
-#{round(Erro_position[0],4):.4f} {round(Erro_position[1],4):.4f}%
             self.inner_contador += 1
 
         # Montando a mensagem do ponto de referência com base no valor das juntas.
@@ -359,7 +381,7 @@ class CompareTrajectory():
         elif self.contador%3 == 2:
             pass
 
-
+        # Atualizando as juntas para o cálculo do erro.
         if self.contador%3 == 0:
             self.J[0,0] = self.J[0,1]
             self.J[1,0] = self.J[1,1]
@@ -374,7 +396,7 @@ class CompareTrajectory():
 
     def get_link_callback(self,msg):
 
-        # Callback destinado a recuperar a posição do executor pelo ground truth. #
+        # Callback destinado a recuperar a pose do executor pelo ground truth. #
 
         position = msg.pose[-1].position
         self.position = [position.x,position.y,position.z]
@@ -383,18 +405,7 @@ class CompareTrajectory():
         orientation = [orientation.x,orientation.y,orientation.z,orientation.w]
         self.orientation = list(euler_from_quaternion(orientation))
 
-    def T_link(self,theta,alfa,a,d):
-
-        # Função que monta a matrix da transformação homogênea entre as juntas. #
-
-        return np.matrix([[cos(theta)          ,-sin(theta)         ,0         ,a           ],
-                          [sin(theta)*cos(alfa),cos(theta)*cos(alfa),-sin(alfa),-sin(alfa)*d],
-                          [sin(theta)*sin(alfa),cos(theta)*sin(alfa),cos(alfa) ,cos(alfa)*d ],
-                          [0                   ,0                   ,0         ,1           ]])
     
-
- 
-
 if __name__ == '__main__':
     try:
         # Criando o objeto e iniciando o nó
